@@ -1,0 +1,36 @@
+# RPi OS img version:
+# TODO
+
+
+# Get Ubuntu OS, kernel version, and hardware:
+lsb_release -a
+hostnamectl
+uname -a
+lshw
+screenfetch (need to apt install)
+
+
+# Ubuntu Packages:
+sudo apt-get update && apt-get upgrade
+sudo apt install chromium-browser ifmetric
+
+
+# INSTALLING PYTHON AND PACKAGES
+sudo apt install python3 python3-pip libatlas-base-dev
+
+
+# INSTALLING xfce4 DESKTOP GUI
+sudo apt install -y lightdm xfce4 xfce4-power-manager network-manager network-manager-gnome
+sudo systemctl set-default graphical.target
+sudo dpkg-reconfigure lightdm
+sudo update-alternatives --config x-session-manager
+# select /usr/bin/startxfce4
+sudo update-alternatives --config x-window-manager
+# select xfwm4
+xset s off
+
+
+# To ensure regular wlanX naming convention, add the following line to "/etc/default/grub"
+# GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"
+sudo update-grub
+sudo reboot

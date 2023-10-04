@@ -1,0 +1,17 @@
+Kali default credentials:
+	username: kali
+	password: kali
+	reference: https://www.kali.org/docs/introduction/default-credentials/
+
+Victim:
+	username: kali
+	password: kali
+
+Eavesdropper:
+	username: kali
+	password: kali
+	kernel version: RPi 5.4.18 (64bit)
+	nexmon patch: bcm43455c0 7.45.206
+
+
+

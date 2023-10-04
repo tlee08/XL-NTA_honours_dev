@@ -1,0 +1,75 @@
+Get Kali OS and kernel version:
+	lsb_release -a
+	hostnamectl
+	uname -a
+	lshw
+	screenfetch (need to apt install)
+
+Kali update (and sometimes GUI fails):
+	sudo apt-get update && apt-get upgrade && apt-get dist-upgrade && apt-get full-upgrade
+	sudo apt install -y kali-desktop-xfce
+	sudo apt list --installed
+	sudo systemctl enable lightdm
+	sudo dpkg-reconfigure lightdm
+	sudo update-alternatives --config x-session-manager
+	sudo rm -r .cache .config .local
+	startxfce4
+	startx
+
+Kali get network details:
+	ifconfig
+	iwconfig wlan0
+	iwgetid
+	iwgetid -r
+	iwgetid -c
+	iwlist wlan0 channels
+	iw wlan0 info
+	nmcli dev
+	nmcli dev wifi
+	nmcli dev show wlan0
+
+	lsusb -v | grep Wireless
+	lspci -v | grep Wireless
+	sudo airman-ng
+
+Kali disable screen blanking:
+	Through settings (https://www.systranbox.com/how-to-turn-off-sleep-mode-on-kali-linux/)
+	
+
+Kali start monitor mode:
+	airmon-ng:
+		sudo airmon-ng check kill
+		sudo airmon-ng start wlan0
+		sudo iwconfig
+		sudo airmon-ng stop wlan0
+		sudo service NetworkManager start
+		sudo service NetworkManager restart
+		
+		# Bug in driver (https://www.aircrack-ng.org/doku.php?id=airmon-ng). Must reload driver after every airman-ng use:
+		dmesg
+		rmmod brcmfmac
+		modprobe brcmfmac
+	iwconfig:
+		sudo service NetworkManager stop
+		sudo ifconfig wlan0 down
+		sudo ifconfig wlan mode monitor
+		sudo ifconfig wlan0 up
+		sudo service NetworkManager start
+		sudo systemctl start NetworkManager
+
+Kali capture wireless traffic with tcpdump
+	sudo tcpdump -I wlan0mon -v
+	sudo tcpdump -I wlan0mon -w outfile.pcap
+
+Kali capture wireless traffic with tshark
+	sudo tshark 
+
+Kali reconnect to network
+	sudo systemctl restart NetworkManager
+
+Disable sleep:
+	sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+	# Refer to https://www.dell.com/support/kbdoc/en-au/000146175/installing-and-configuring-amdgpu-pro-in-ubuntu-16-04-linux
+	# Refer to https://devicetests.com/fix-black-screen-after-suspend-ubuntu
+
+

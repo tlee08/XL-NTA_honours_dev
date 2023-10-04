@@ -1,0 +1,66 @@
+# Using RPi 5.10.92 image (https://downloads.raspberrypi.org/raspios_lite_armhf/images/raspios_lite_armhf-2022-01-28/)
+
+# INSTALLING NETWORK MANAGER (AND GUI)
+sudo apt update
+sudo apt install -y network-manager network-manager-gnome ifmetric wireshark
+# Set network-manager in raspi-config (advanced options -> network config)
+
+
+# INSTALLING KERNEL HEADERS (FOR CORRECT VERSION WITH rpi-source)
+sudo apt update
+sudo apt install -y git bc bison flex libssl-dev python2
+sudo wget https://raw.githubusercontent.com/RPi-Distro/rpi-source/master/rpi-source -O /usr/local/bin/rpi-source && sudo chmod +x /usr/local/bin/rpi-source && /usr/local/bin/rpi-source -q --tag-update
+rpi-source
+sudo apt install -y libncurses5-dev
+
+
+# SETTING UP DATE TIME
+sudo apt update
+sudo apt install -y systemd systemd-timesyncd ntp
+sudo systemctl unmask systemd-timesyncd.service
+sudo systemctl enable systemd-timesyncd.service
+sudo systemctl start systemd-timesyncd.service
+sudo timedatectl set-ntp true
+timedatectl
+
+
+# INSTALLING ASUS AC53 Nano DRIVER (CHIPSET 88x2bu)
+sudo apt update
+sudo apt install -y build-essential bc dkms git
+mkdir -p ~/src
+cd ~/src
+git clone https://github.com/morrownr/88x2bu-20210702.git
+cd ~/src/88x2bu-20210702
+sudo ./install-driver.sh
+
+
+# SAVING BRCMFMAC DRIVERS (DON'T SEEM TO WORK WHEN RE-USING THOUGH - USE 88x2bu FOR WIFI)
+mkdir -p ~/src/original
+cd ~/src/original/
+cp "/lib/firmware/brcm/brcmfmac43455-sdio.bin" .
+cp "$(modinfo brcmfmac -n)" .
+
+
+# INSTALLING NEXMON CSI DRIVERS AND SOFTWARE
+sudo apt update
+sudo apt install -y automake bc bison flex gawk git libgmp3-dev libncurses5-dev libssl-dev libtool-bin make python-is-python2 qpdf tcpdump texinfo tmux
+# get kernel headers with rpi-source
+cd ~/src
+curl "10.0.1.18:8080/serveFile?root=0_setup/raspberry_pi&fp=nexmon_install.sh" | sudo bash
+
+
+# INSTALLING DESKTOP GUI (using lightdm and xfce4)
+sudo apt install -y xserver-xorg xfce4 xfce4-goodies
+sudo systemctl set-default graphical.target
+sudo dpkg-reconfigure lightdm
+sudo update-alternatives --config x-session-manager
+# select /usr/bin/startxfce4
+sudo update-alternatives --config x-window-manager
+# select xfwm4
+
+
+# INSTALLING PYTHON AND PACKAGES
+sudo apt install python3 python3-pip libatlas-base-dev
+
+# Set the ethernet connection with "manual" DHCP
+# Set the screen battery manager to NEVER sleep

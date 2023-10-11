@@ -239,8 +239,9 @@ def read_frame(fc, ptr, bandwidth):
     frame["rssi"] = struct.unpack("<b", fc[ptr + 60 : ptr + 61])[0]
     frame["fctl"] = fc[ptr + 61 : ptr + 62].hex()
     frame["mac"] = ":".join([i.to_bytes().hex() for i in fc[ptr + 62 : ptr + 68]])
-    seq = int.from_bytes(fc[ptr + 68 : ptr + 70], "little", signed=False)
-    frame["fragn"] = seq & 7
+    # seq = int.from_bytes(fc[ptr + 68 : ptr + 70], "little", signed=False)
+    seq = struct.unpack(UINT16, fc[ptr + 68 : ptr + 70])[0]
+    frame["fragn"] = seq & 15
     frame["seqn"] = seq >> 4
     frame["css"] = fc[ptr + 70 : ptr + 72].hex()
     frame["chanspec"] = fc[ptr + 72 : ptr + 74].hex()
@@ -259,86 +260,77 @@ def read_frame(fc, ptr, bandwidth):
 
 
 def check_frame(frame, bandwidth):
-    try:
-        nsubs = get_nsubs(bandwidth)
-        # Packet should be a certain length
-        assert frame["incl_len"] == (
-            14 + 20 + 8 + 18 + 4 * nsubs + len(frame["eth_fcs"])
-        )
-        # Ethernet source MAC address should be specific value
-        assert frame["eth_smac"] == "4e:45:58:4d:4f:4e"
-        # Ethernet destination MAC address should be specific value
-        assert frame["eth_dmac"] == "ff:ff:ff:ff:ff:ff"
-        # IP source address should be specific value
-        assert frame["ip_saddr"] == "10.10.10.10"
-        # IP destination address should be specific value
-        assert frame["ip_daddr"] == "255.255.255.255"
-        # UDP source port should be specific value
-        assert frame["udp_sport"] == 5500
-        # UDP destination port should be specific value
-        assert frame["udp_dport"] == 5500
-        # UDP packet should be certain length
-        assert frame["udp_len"] == (8 + 18 + 4 * nsubs)
-        # Magic bytes should be a specific value
-        assert frame["magic_bytes"] == "1111"
-    except Exception as e:
-        print(f"Error: {e}")
-        print(f"{frame}")
+    # try:
+    nsubs = get_nsubs(bandwidth)
+    # Packet should be a certain length
+    assert frame["incl_len"] == (14 + 20 + 8 + 18 + 4 * nsubs + len(frame["eth_fcs"]))
+    # Ethernet source MAC address should be specific value
+    assert frame["eth_smac"] == "4e:45:58:4d:4f:4e"
+    # Ethernet destination MAC address should be specific value
+    assert frame["eth_dmac"] == "ff:ff:ff:ff:ff:ff"
+    # IP source address should be specific value
+    assert frame["ip_saddr"] == "10.10.10.10"
+    # IP destination address should be specific value
+    assert frame["ip_daddr"] == "255.255.255.255"
+    # UDP source port should be specific value
+    assert frame["udp_sport"] == 5500
+    # UDP destination port should be specific value
+    assert frame["udp_dport"] == 5500
+    # UDP packet should be certain length
+    assert frame["udp_len"] == (8 + 18 + 4 * nsubs)
+    # Magic bytes should be a specific value
+    assert frame["magic_bytes"] == "1111"
+    # except Exception as e:
+    #     print(f"Error: {e}")
+    #     print(f"{frame}")
 
 
 def read_csi(fp):
+    # Initialising frames dict
+    frames = {}
     # Reading in CSI pcap file as bytes
     fc = read_bytefile(fp)
     # Reading in global and overall settings
     fc_size = len(fc)
-    global_dict = read_global(fc)
+    frames["global"] = read_global(fc)
     nframes = get_nframes(fc)
     bandwidth = get_bandwidth(fc)
     nsubs = get_nsubs(bandwidth)
+    # Frame values to read
+    cols_to_read = [
+        ("ts_sec", nframes, np.int32),
+        ("ts_usec", nframes, np.int32),
+        ("rssi", nframes, np.int8),
+        ("fctl", nframes, np.uint8),
+        ("mac", nframes, "<U17"),
+        ("fragn", nframes, np.uint8),
+        ("seqn", nframes, np.uint16),
+        ("css", nframes, "<U4"),
+        ("chanspec", nframes, "<U4"),
+        ("chipv", nframes, "<U4"),
+        ("csi", [nframes, nsubs], np.complex64),
+    ]
     # Initialising np arrays to store pcap CSI values and metadata in
-    frame_num = np.arange(nframes)
-    rssi = np.zeros(nframes, dtype=np.int8)
-    fctl = np.zeros(nframes, dtype=np.uint8)
-    mac = np.zeros(nframes, dtype="<U17")
-    fragn = np.zeros(nframes, dtype=np.uint8)
-    seqn = np.zeros(nframes, dtype=np.uint16)
-    css = np.zeros(nframes, dtype="<U4")
-    chanspec = np.zeros(nframes, dtype="<U4")
-    chipv = np.zeros(nframes, dtype="<U4")
-    csi = np.zeros([nframes, nsubs], dtype=np.complex64)
+    for col, shape, dtype in cols_to_read:
+        frames[col] = np.zeros(shape, dtype=dtype)
     # Offset for the global header
     ptr = 24
     i = 0
+    # Reading each frame
     while ptr < fc_size:
         # Reading and checking frame
         frame = read_frame(fc, ptr, bandwidth)
         check_frame(frame, bandwidth)
         # Storing values
-        rssi[i] = frame["rssi"]
-        fctl[i] = frame["fctl"]
-        mac[i] = frame["mac"]
-        fragn[i] = frame["fragn"]
-        seqn[i] = frame["seqn"]
-        css[i] = frame["css"]
-        chanspec[i] = frame["chanspec"]
-        chipv[i] = frame["chipv"]
-        csi[i] = frame["csi"]
+        for col, shape, dtype in cols_to_read:
+            frames[col][i] = frame[col]
         # Updating i and ptr
         i += 1
         ptr += 16 + frame["incl_len"]
-    return {
-        "global": global_dict,
-        "frame_num": frame_num,
-        "rssi": rssi,
-        "fctl": fctl,
-        "mac": mac,
-        "fragn": fragn,
-        "seqn": seqn,
-        "css": css,
-        "chanspec": chanspec,
-        "chipv": chipv,
-        "csi": csi,
-    }
+    # Adding derivative columns
+    frames["frame_num"] = np.arange(nframes)
+    frames["ts_sec_comb"] = frames["ts_sec"] + frames["ts_usec"] / np.power(10, 6)
+    return frames
 
 
 """
@@ -427,7 +419,12 @@ def check_csi(csi_matrix):
 
 
 def process_csi(_csi_matrix, rnull=False, rpilot=False, rm_outliers=None):
-    # Otherwise, process the csi
+    """
+    Preprocessing the CSI matrix by:
+        - Setting null subcarriers to 0
+        - Setting pilot subcarriers to 0
+        - Setting outliers to the mean value for each subcarrier
+    """
     csi_matrix = _csi_matrix.copy()
     bandwidth = int(csi_matrix.shape[1] / 3.2)
     # Setting null and pilot subcarriers to 0 (if specified)
@@ -488,7 +485,6 @@ def combine_csis(fps, nframes):
         - 0 axis: The individual csi capture matrix (i.e. the file)
         - 1 axis: The frames (note: must be trimmed or padded - same size across all)
         - 2 axis: The subcarrier
-
     The values are the complex CSI values
     """
     # Getting the # of subcarriers in the csi data by

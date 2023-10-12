@@ -20,7 +20,7 @@ for i in os.listdir(from_dir):
         os.makedirs(os.path.join(to_dir, i, j), exist_ok=True)
         # Copying csi_all.npy to corresponding directory
         shutil.copytree(
-            os.path.join(from_dir, i, j, "csi_h5"),
-            os.path.join(to_dir, i, j, "csi_h5")
+            os.path.join(from_dir, i, j, "wlan_h5"),
+            os.path.join(to_dir, i, j, "wlan_h5")
         )
     print()

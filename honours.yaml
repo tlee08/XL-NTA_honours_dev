@@ -17,6 +17,7 @@ dependencies:
   - pytables
   - matplotlib
   - seaborn
+  - ipympl
   - regex
   - psutil
   - ipywidgets

@@ -1,4 +1,0 @@
-numpy
-regex
-selenium
-psutil

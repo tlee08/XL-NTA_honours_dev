@@ -24,56 +24,59 @@ H5_WLAN_KEY = "wlan"
 # List all possible fields
 command = "tshark -G | cut -f 3"
 
-TSHARK_FIELDS = """
--e frame
--e frame.time_epoch
--e frame.time_relative
--e frame.number
--e frame.len
+FIELDS = [
+    #
+    # ("frame",),
+    # ("frame.time_epoch",),
+    ("frame.time_relative", np.float64),
+    ("frame.number", np.int64),
+    ("frame.len", np.int32),
+    #
+    # ("radiotap", "<U30"),
+    #
+    # ("wlan_radio", "<30"),
+    # ("wlan_radio.phy", "<U16"),
+    # ("wlan_radio.data_rate", "<U16"),
+    # ("wlan_radio.channel", "<U16"),
+    # ("wlan_radio.frequency", "<U16"),
+    ("wlan_radio.signal_dbm", np.int8),
+    # ("wlan_radio.duration", "<U16"),
+    #
+    # ("wlan", "<U30"),
+    # ("wlan.fc", "<U16"),
+    ("wlan.fc.version", np.int8),
+    ("wlan.fc.type", np.int8),
+    ("wlan.fc.subtype", np.int8),
+    ("wlan.frag", np.int8),
+    ("wlan.seq", np.int16),
+    # ("wlan.ra", "<U17"),
+    # ("wlan.ta", "<U17"),
+    ("wlan.da", "<U17"),
+    ("wlan.sa", "<U17"),
+    # ("wlan.bssid", "<U17"),
+    # ("wlan.staa", "<U30"),
+    #
+    # ("ip", "<U30"),
+    # ("ip.version", np.int8),
+    # ("ip.proto", np.int8),
+    ("ip.src", "<U15"),
+    ("ip.dst", "<U15"),
+    ("ip.len", np.int16),
+    #
+    # ("tcp", "<U30"),
+    ("tcp.srcport", np.int16),
+    ("tcp.dstport", np.int16),
+    # ("tcp.stream", np.int32),
+    # ("tcp.len", np.int16),
+    #
+    # ("udp", "<U30"),
+    ("udp.srcport", np.int16),
+    ("udp.dstport", np.int16),
+    # ("udp.stream", np.int32),
+    # ("udp.length", np.int16),
+]
 
--e radiotap
-
--e wlan_radio
--e wlan_radio.phy
--e wlan_radio.data_rate
--e wlan_radio.channel
--e wlan_radio.frequency
--e wlan_radio.signal_dbm
--e wlan_radio.duration
-
--e wlan
--e wlan.fc.version
--e wlan.fc.type
--e wlan.fc.subtype
--e wlan.frag
--e wlan.seq
--e wlan.fc
--e wlan.ra
--e wlan.ta
--e wlan.da
--e wlan.sa
--e wlan.bssid
--e wlan.staa
-
--e ip
--e ip.version
--e ip.proto
--e ip.src
--e ip.dst
--e ip.len
-
--e tcp
--e tcp.srcport
--e tcp.dstport
--e tcp.stream
--e tcp.len
-
--e udp
--e udp.srcport
--e udp.dstport
--e udp.stream
--e udp.length
-"""
+TSHARK_FIELDS = " \n".join([f"-e {i[0]}" for i in FIELDS])
 
 """
 **************************************************************************************************
@@ -98,10 +101,7 @@ def parse_json(fp):
 
 
 # VERY IMPORTANT FUNCTION - THIS DECRYPTS AND OUTPUTS KEY RAW FEATURES AS A DICT (LIKE A JSON)
-def pcap_to_json(wlan_fp, json_dir, ssid, pwd, fields):
-    # Getting filepaths
-    name = os.path.splitext(os.path.split(wlan_fp)[1])[0]
-    json_fp = os.path.join(json_dir, f"{name}.json")
+def pcap_to_json(wlan_fp, json_fp, ssid, pwd, fields):
     # Constructing tshark command to read, decrypt, and get key fields from pcap file
     command = rf"""tshark
         -nr {wlan_fp}
@@ -133,22 +133,6 @@ def json_to_df(json_fp):
     return df
 
 
-def col_as_num(df, col):
-    if col not in df.columns:
-        series = np.nan
-    else:
-        series = pd.to_numeric(df[col])
-    return series
-
-
-def col_as_str(df, col):
-    if col not in df.columns:
-        series = np.nan
-    else:
-        series = df[col]
-    return series
-
-
 def add_is_upstream_attr(df, mac_src):
     # mac_src defines whether it is upstream/downstream
     # frames from mac_src is upstream, frames to mac_src is downstream
@@ -178,33 +162,21 @@ def add_stream_attr(df):
     return df
 
 
-def df_wlan_clean(df):
+def df_wlan_clean(df, fields):
+    # Filling in missing values
+    df = df.fillna(0)
     # Setting the correct column dtypes
-    df["ip.src"] = col_as_str(df, "ip.src")
-    df["ip.dst"] = col_as_str(df, "ip.dst")
-    df["wlan_radio.channel"] = col_as_num(df, "wlan_radio.channel")
-    df["frame.number"] = col_as_num(df, "frame.number")
-    df["frame.len"] = col_as_num(df, "frame.len")
-    df["frame.time_epoch"] = col_as_num(df, "frame.time_epoch")
-    df["frame.time_relative"] = col_as_num(df, "frame.time_relative")
-    df["ip.len"] = col_as_num(df, "ip.len")
-    df["udp.length"] = col_as_num(df, "udp.length")
-    df["udp.srcport"] = col_as_num(df, "udp.srcport")
-    df["udp.dstport"] = col_as_num(df, "udp.dstport")
-    df["udp.stream"] = col_as_num(df, "udp.stream")
-    df["tcp.len"] = col_as_num(df, "tcp.len")
-    df["tcp.stream"] = col_as_num(df, "tcp.stream")
+    for col, col_type in fields:
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = df[col].astype(col_type)
     return df
 
 
 def df_wlan_derive_attrs(df, mac_src):
     df = add_is_upstream_attr(df, mac_src)
-    df = add_stream_attr(df)
+    # df = add_stream_attr(df)
     return df
-
-
-def save_df_wlan(df, h5_fp):
-    df.to_hdf(h5_fp, key=H5_WLAN_KEY, mode="w")
 
 
 """

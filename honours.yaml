@@ -1,9 +1,6 @@
 # conda env create -f honours.yaml -y
 # conda env update -f honours.yaml --prune -y
 
-# micromamba create -f honours.yaml -y
-# conda rename -p /Users/timothylee/micromamba/envs/honours_env honours_env
-
 # conda env remove -n honours_env -y
 
 name: honours_env

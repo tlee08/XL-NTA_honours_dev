@@ -8,8 +8,6 @@ from matplotlib.colors import LogNorm
 from ipywidgets import interact, widgets
 from IPython.display import display
 
-from HelperFuncs import *
-
 
 """
 **************************************************************************************************

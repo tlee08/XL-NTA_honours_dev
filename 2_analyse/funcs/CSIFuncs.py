@@ -7,13 +7,20 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm, Normalize
 
-from HelperFuncs import *
+from .HelperFuncs import *
 
 """
 **************************************************************************************************
             DEFINING CONSTANTS (STRUCT TYPES AND NULL & PILOT SUBCARRIERS)
 **************************************************************************************************
 """
+
+PCAP_GLOBAL_LEN = 24
+PCAP_HEADER_LEN = 16
+HEX_SIZE = 16
+
+H5_CSI_KEY = "csi"
+
 
 # Indexes of Null and Pilot OFDM subcarriers
 # https://www.oreilly.com/library/view/80211ac-a-survival/9781449357702/ch02.html
@@ -220,7 +227,7 @@ def read_frame(fc, ptr, bandwidth):
     frame["eth_smac"] = ":".join([i.to_bytes().hex() for i in fc[ptr + 22 : ptr + 28]])
     frame["eth_ipv"] = struct.unpack(UINT16, fc[ptr + 28 : ptr + 30])[0]
     # Sometimes there is a eth frame check sequence
-    frame["eth_fcs"] = fc[ptr + 76 + (nsubs * 4) : ptr + 16 + frame["incl_len"]]
+    frame["eth_fcs"] = fc[ptr + 76 + (nsubs * 4) : ptr + PCAP_HEADER_LEN + frame["incl_len"]]
 
     # IP packet header (20 bytes long)
     # Not sure what the fields in this range mean. May not even be important
@@ -314,7 +321,7 @@ def read_csi(fp):
     for col, shape, dtype in cols_to_read:
         frames[col] = np.zeros(shape, dtype=dtype)
     # Offset for the global header
-    ptr = 24
+    ptr = PCAP_GLOBAL_LEN
     i = 0
     # Reading each frame
     while ptr < fc_size:
@@ -326,10 +333,11 @@ def read_csi(fp):
             frames[col][i] = frame[col]
         # Updating i and ptr
         i += 1
-        ptr += 16 + frame["incl_len"]
+        ptr += PCAP_HEADER_LEN + frame["incl_len"]
     # Adding derivative columns
     frames["frame_num"] = np.arange(nframes)
     frames["ts_sec_comb"] = frames["ts_sec"] + frames["ts_usec"] / np.power(10, 6)
+    frames["ts_sec_comb_rel"] = frames["ts_sec_comb"] - frames["ts_sec_comb"][0]
     return frames
 
 
@@ -362,7 +370,7 @@ def get_bandwidth(fc):
 def get_nframes(fc):
     # Initialising vals
     fc_size = len(fc)
-    ptr = 24
+    ptr = PCAP_GLOBAL_LEN
     i = 0
     # Counting the number of frames by going through all incl_len vals in file
     while ptr < fc_size:
@@ -370,8 +378,8 @@ def get_nframes(fc):
         incl_len = struct.unpack(UINT32, fc[ptr + 8 : ptr + 12])[0]
         # Incrementing the number of frames val
         i += 1
-        # Moving to the next frame in the file: incl_len + frame's header size (16 bytes)
-        ptr += 16 + incl_len
+        # Moving to the next frame in the file: incl_len + frame's header size
+        ptr += PCAP_HEADER_LEN + incl_len
     # Checking that we correctly read the file. The ptr be at the file's "exact" end.
     assert ptr == fc_size
     return i
@@ -389,7 +397,7 @@ def print_raw_bytes(fc, start=None, finish=None):
     # Printing packet content as raw bytes
     for i in range(start, finish):
         print(fc[i].to_bytes().hex().ljust(4, " "), end=" ")
-        if (i - start) % 16 == 16 - 1:
+        if (i - start) % HEX_SIZE == HEX_SIZE - 1:
             print()
     print()
 

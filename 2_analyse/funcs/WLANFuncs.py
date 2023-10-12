@@ -26,21 +26,21 @@ command = "tshark -G | cut -f 3"
 
 FIELDS = [
     #
-    # ("frame",),
-    # ("frame.time_epoch",),
+    # ("frame", "<U30"),
+    # ("frame.time_epoch", np.float64),
     ("frame.time_relative", np.float64),
     ("frame.number", np.int64),
     ("frame.len", np.int32),
     #
     # ("radiotap", "<U30"),
     #
-    # ("wlan_radio", "<30"),
+    # ("wlan_radio", "<U30"),
     # ("wlan_radio.phy", "<U16"),
-    # ("wlan_radio.data_rate", "<U16"),
-    # ("wlan_radio.channel", "<U16"),
-    # ("wlan_radio.frequency", "<U16"),
+    # ("wlan_radio.data_rate", np.int8),
+    # ("wlan_radio.channel", np.int16),
+    # ("wlan_radio.frequency", np.int16),
     ("wlan_radio.signal_dbm", np.int8),
-    # ("wlan_radio.duration", "<U16"),
+    # ("wlan_radio.duration", np.int16),
     #
     # ("wlan", "<U30"),
     # ("wlan.fc", "<U16"),
@@ -58,7 +58,7 @@ FIELDS = [
     #
     # ("ip", "<U30"),
     # ("ip.version", np.int8),
-    # ("ip.proto", np.int8),
+    ("ip.proto", np.int8),
     ("ip.src", "<U15"),
     ("ip.dst", "<U15"),
     ("ip.len", np.int16),
@@ -77,17 +77,6 @@ FIELDS = [
 ]
 
 TSHARK_FIELDS = " \n".join([f"-e {i[0]}" for i in FIELDS])
-
-"""
-**************************************************************************************************
-            OVERALL HELPER FUNCS
-**************************************************************************************************
-"""
-
-
-def parse_json(fp):
-    with open(fp, "r") as f:
-        return json.load(f)
 
 
 """
@@ -116,7 +105,7 @@ def pcap_to_json(wlan_fp, json_fp, ssid, pwd, fields):
 
 """
 **************************************************************************************************
-            JSON TO H5 FUNCS
+            JSON TO DF FUNCS
 **************************************************************************************************
 """
 
@@ -129,11 +118,28 @@ def json_to_df(json_fp):
     # Making df
     df = pd.DataFrame(data.tolist())
     # Unwrapping the lists to the first element value
-    df = df.applymap(lambda x: x[0] if isinstance(x, list) else x)
+    df = df.map(lambda x: x[0] if isinstance(x, list) else x)
     return df
 
 
-def add_is_upstream_attr(df, mac_src):
+def df_wlan_clean(df, fields):
+    fill_val = 0
+    # Filling in missing values
+    df = df.fillna(fill_val)
+    # Setting the correct column dtypes
+    for col, col_type in fields:
+        if col not in df.columns:
+            df[col] = fill_val
+        df[col] = df[col].astype(col_type)
+    # Cleaning the TCP/UDP ports (it is always either or)
+    get_port = np.vectorize(lambda a, b: a if not a != 0 else b)
+    df["srcport"] = get_port(df["tcp.srcport"], df["udp.srcport"])
+    df["dstport"] = get_port(df["tcp.dstport"], df["udp.dstport"])
+    df = df.drop(columns=["tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport"])
+    return df
+
+
+def calc_is_upstream_attr(df, mac_src):
     # mac_src defines whether it is upstream/downstream
     # frames from mac_src is upstream, frames to mac_src is downstream
     # Checking mac_src is at either sa (source) or da (destination) for ALL frames
@@ -141,14 +147,13 @@ def add_is_upstream_attr(df, mac_src):
     if np.mean(has_mac) != 1:
         raise ValueError(
             f"The mac, {mac_src}, is not in all packets. The frame numbers without the mac address are:"
-            + f"{df.index[np.logical_not(has_mac)]}"
+            + f"{df.loc[np.logical_not(has_mac), 'frame.number']}"
         )
     # Determining whether the frame is upstreaming or downstreaming
-    df["is_upstream"] = df["wlan.sa"] == mac_src
-    return df
+    return df["wlan.sa"] == mac_src
 
 
-def add_stream_attr(df):
+def calc_stream_attr(df):
     # Adds column of IP stream "<source> -> <dest>"
     # All source will be the client's MAC address
     # MUST have the "is_upstream" column
@@ -158,26 +163,52 @@ def add_stream_attr(df):
         else:
             return f"{row['ip.dst']} -> {row['ip.src']}"
 
-    df["stream"] = df.apply(_add_stream_attr, axis=1)
-    return df
-
-
-def df_wlan_clean(df, fields):
-    # Filling in missing values
-    df = df.fillna(0)
-    # Setting the correct column dtypes
-    for col, col_type in fields:
-        if col not in df.columns:
-            df[col] = np.nan
-        df[col] = df[col].astype(col_type)
-    return df
+    return df.apply(_add_stream_attr, axis=1)
 
 
 def df_wlan_derive_attrs(df, mac_src):
-    df = add_is_upstream_attr(df, mac_src)
-    # df = add_stream_attr(df)
+    df["is_upstream"] = calc_is_upstream_attr(df, mac_src)
+    # df["stream"] = calc_stream_attr(df)
     return df
 
+
+"""
+**************************************************************************************************
+            JSON TO DF MULTIPROCESSING
+**************************************************************************************************
+"""
+
+
+def wlan_to_df_init_mp(_ssid, _pwd):
+    import warnings
+    warnings.filterwarnings("ignore")
+    global ssid
+    global pwd
+    ssid = _ssid
+    pwd = _pwd
+
+def wlan_to_df_mp(dir, name):
+    print(f"{dir} - {name}")
+    # Getting filepaths
+    wlan_fp = os.path.join(dir, "wlan", f"{name}.pcap")
+    metadata_fp = os.path.join(dir, "metadata", f"{name}.json")
+    json_fp = os.path.join(dir, "wlan_json", f"{name}.json")
+    h5_fp = os.path.join(dir, "wlan_h5", f"{name}.h5")
+    # If the h5 file already exists, then skip
+    # if os.path.isfile(h5_fp):
+    #     continue
+    # Getting metadata
+    with open(metadata_fp, "r") as f:
+        metadata = json.load(f)
+    # Converting pcap to decrypted json
+    pcap_to_json(wlan_fp, json_fp, ssid, pwd, TSHARK_FIELDS)
+    # Converting json to h5, processing (adding attributes), and saving
+    df = json_to_df(json_fp)
+    df = df_wlan_clean(df, FIELDS)
+    df = df_wlan_derive_attrs(df, metadata["mac"])
+    df.to_hdf(h5_fp, key=H5_WLAN_KEY, mode="w")
+    # Making space on the filesystem by removing the wlan_json file (always large)
+    os.remove(json_fp)
 
 """
 **************************************************************************************************

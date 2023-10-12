@@ -6,6 +6,10 @@ from glob import glob
 from_dir = "/Volumes/tim_details/tim_honours/CAPTURES/"
 to_dir = "/Users/timothylee/Desktop/Captures"
 
+try:
+    os.mkdir(to_dir)
+except:
+    pass
 
 for i in os.listdir(from_dir):
     print(i)
@@ -15,8 +19,8 @@ for i in os.listdir(from_dir):
         # Making directory
         os.makedirs(os.path.join(to_dir, i, j), exist_ok=True)
         # Copying csi_all.npy to corresponding directory
-        shutil.copyfile(
-            os.path.join(from_dir, i, j, "csi_all.npy"),
-            os.path.join(to_dir, i, j, "csi_all.npy")
+        shutil.copytree(
+            os.path.join(from_dir, i, j, "csi_h5"),
+            os.path.join(to_dir, i, j, "csi_h5")
         )
     print()

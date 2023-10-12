@@ -2,6 +2,7 @@
 
 import struct
 import numpy as np
+import pandas as pd
 import seaborn as sns
 
 import matplotlib.pyplot as plt
@@ -293,6 +294,9 @@ def check_frame(frame, bandwidth):
 
 
 def read_csi(fp):
+    """
+    Reads a csi pcap file in and returns a dict with the data.
+    """
     # Initialising frames dict
     frames = {}
     # Reading in CSI pcap file as bytes
@@ -335,15 +339,20 @@ def read_csi(fp):
         i += 1
         ptr += PCAP_HEADER_LEN + frame["incl_len"]
     # Adding derivative columns
-    frames["frame_num"] = np.arange(nframes)
-    frames["ts_sec_comb"] = frames["ts_sec"] + frames["ts_usec"] / np.power(10, 6)
-    frames["ts_sec_comb_rel"] = frames["ts_sec_comb"] - frames["ts_sec_comb"][0]
+    if check_csi(frames["csi"]):
+        frames["frame_num"] = np.arange(1, nframes+1)
+        frames["ts_sec_comb"] = frames["ts_sec"] + frames["ts_usec"] / np.power(10, 6)
+        frames["ts_sec_comb_rel"] = frames["ts_sec_comb"] - frames["ts_sec_comb"][0]
+    else:
+        frames["frame_num"] = []
+        frames["ts_sec_comb"] = []
+        frames["ts_sec_comb_rel"] = []
     return frames
 
 
 """
 **************************************************************************************************
-            HELPER FUNCS TO PARSE/PROCESS CSI
+            HELPER FUNCS TO PARSE CSI
 **************************************************************************************************
 """
 
@@ -482,45 +491,116 @@ def make_freq_distr(csi_matrix, frame_bins):
 
 """
 **************************************************************************************************
+            FRAMES DICT TO DF FUNCS
+**************************************************************************************************
+"""
+
+
+def frames_to_df(frames):
+    # Process CSI (if possible)
+    csi = frames["csi"]
+    if check_csi(csi):
+        # Processing csi info
+        csi = process_csi(csi, True, True, 5)
+    # Making CSI capture DataFrame
+    df = pd.DataFrame(
+        {   
+            "frame.time_relative": frames["ts_sec_comb_rel"],
+            "fctl": frames["fctl"],
+            "fragn": frames["fragn"],
+            "seqn": frames["seqn"],
+        },
+        index=frames["frame_num"],
+    )
+    # Adding CSI subcarrier vals as columns
+    for i in np.arange(csi.shape[1]):
+        df[f"csi_{i}_r"] = np.float16(np.real(csi[:, i]))
+        df[f"csi_{i}_i"] = np.float16(np.imag(csi[:, i]))
+    return df
+
+
+"""
+**************************************************************************************************
+            FRAMES DICT TO DF MULTIPROCESSING
+**************************************************************************************************
+"""
+
+def csi_to_df_init_mp():
+    import warnings
+    warnings.filterwarnings("ignore")
+
+def csi_to_df_mp(dir, name):
+    print(f"{dir} - {name}")
+    # Getting filepaths
+    csi_fp = os.path.join(dir, "csi", f"{name}.pcap")
+    h5_fp = os.path.join(dir, "csi_h5", f"{name}.h5")
+    # If the h5 file already exists, then skip
+    # if os.path.isfile(h5_fp):
+    #     continue
+    # Reading csi info (including metadata)
+    frames = read_csi(csi_fp)
+    # Format frames as a DataFrame
+    df = frames_to_df(frames)
+    # Saving CSI dataframe as h5
+    df.to_hdf(h5_fp, key=H5_CSI_KEY, mode="w")
+
+
+"""
+**************************************************************************************************
+            DF TO CSI MATRIX FUNCS
+**************************************************************************************************
+"""
+
+
+def df_to_csi_matrix(df):
+    nsubs = int(np.sum("csi_" in df.columns)/2)
+    nframes = df.shape[0]
+    csi = np.zeros((nframes, nsubs), dtype=np.complex64)
+    for i in np.arange(nsubs):
+        csi[:, i] = (df[f"csi_{i}_r"] + 1j * df[f"csi_{i}_i"]).astype(np.complex64)
+    return csi
+
+
+"""
+**************************************************************************************************
             AGGREGATING CSI DATA FROM AN GROUP OF CAPTURES
 **************************************************************************************************
 """
 
 
-def combine_csis(fps, nframes):
-    """
-    Combines the csi values into a 3D array with:
-        - 0 axis: The individual csi capture matrix (i.e. the file)
-        - 1 axis: The frames (note: must be trimmed or padded - same size across all)
-        - 2 axis: The subcarrier
-    The values are the complex CSI values
-    """
-    # Getting the # of subcarriers in the csi data by
-    # reading in files and getting bandwidth of first valid capture file
-    nsubs = 0
-    for fp in fps:
-        fc = read_bytefile(fp)
-        bandwidth = get_bandwidth(fc)
-        if bandwidth != 0:
-            nsubs = get_nsubs(bandwidth)
-            break
-    # Initialising combined csi array
-    combined_csi = np.zeros((len(fps), nframes, nsubs), dtype=np.complex64)
-    # Reading in each CSI pcap
-    for i, fp in enumerate(fps):
-        # print(get_name(fp))
-        # Reading CSI pcap
-        frames = read_csi(fp)
-        # Checking CSI if valid
-        if check_csi(frames["csi"]):
-            csi = frames["csi"]
-            # Processing CSI matrix (removing pilot, null, and outliers)
-            # csi = process_csi(csi, True, True, 10)
-            # Padding CSI matrix so dimensions stay the same
-            csi = pad_csi(csi, nframes)
-            # Adding the csi to the combines csi matrix
-            combined_csi[i] = csi
-    return combined_csi
+# def combine_csis(fps, nframes):
+#     """
+#     Combines the csi values into a 3D array with:
+#         - 0 axis: The individual csi capture matrix (i.e. the file)
+#         - 1 axis: The frames (note: must be trimmed or padded - same size across all)
+#         - 2 axis: The subcarrier
+#     The values are the complex CSI values
+#     """
+#     # Getting the # of subcarriers in the csi data by
+#     # reading in files and getting bandwidth of first valid capture file
+#     nsubs = 0
+#     for fp in fps:
+#         fc = read_bytefile(fp)
+#         bandwidth = get_bandwidth(fc)
+#         if bandwidth != 0:
+#             nsubs = get_nsubs(bandwidth)
+#             break
+#     # Initialising combined csi array
+#     combined_csi = np.zeros((len(fps), nframes, nsubs), dtype=np.complex64)
+#     # Reading in each CSI pcap
+#     for i, fp in enumerate(fps):
+#         # Reading CSI pcap
+#         frames = read_csi(fp)
+#         # Checking CSI if valid
+#         if check_csi(frames["csi"]):
+#             csi = frames["csi"]
+#             # Processing CSI matrix (removing pilot, null, and outliers)
+#             # csi = process_csi(csi, True, True, 10)
+#             # Padding CSI matrix so dimensions stay the same
+#             csi = pad_csi(csi, nframes)
+#             # Adding the csi to the combines csi matrix
+#             combined_csi[i] = csi
+#     return combined_csi
 
 
 def get_summaries(fps):

@@ -1,6 +1,3 @@
-# from scapy.all import *
-
-import struct
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -9,7 +6,6 @@ import pandas as pd
 from glob import glob
 import os
 from subprocess import Popen, PIPE, run
-import regex as re
 import json
 
 

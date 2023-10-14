@@ -228,7 +228,9 @@ def read_frame(fc, ptr, bandwidth):
     frame["eth_smac"] = ":".join([i.to_bytes().hex() for i in fc[ptr + 22 : ptr + 28]])
     frame["eth_ipv"] = struct.unpack(UINT16, fc[ptr + 28 : ptr + 30])[0]
     # Sometimes there is a eth frame check sequence
-    frame["eth_fcs"] = fc[ptr + 76 + (nsubs * 4) : ptr + PCAP_HEADER_LEN + frame["incl_len"]]
+    frame["eth_fcs"] = fc[
+        ptr + 76 + (nsubs * 4) : ptr + PCAP_HEADER_LEN + frame["incl_len"]
+    ]
 
     # IP packet header (20 bytes long)
     # Not sure what the fields in this range mean. May not even be important
@@ -340,13 +342,17 @@ def read_csi(fp):
         ptr += PCAP_HEADER_LEN + frame["incl_len"]
     # Adding derivative columns
     if check_csi(frames["csi"]):
-        frames["frame_num"] = np.arange(1, nframes+1)
-        frames["ts_sec_comb"] = frames["ts_sec"] + frames["ts_usec"] / np.power(10, 6)
-        frames["ts_sec_comb_rel"] = frames["ts_sec_comb"] - frames["ts_sec_comb"][0]
+        frames["frame.number"] = np.arange(1, nframes + 1)
+        frames["frame.time_epoch"] = frames["ts_sec"] + frames["ts_usec"] / np.power(
+            10, 6
+        )
+        frames["frame.time_relative"] = (
+            frames["frame.time_epoch"] - frames["frame.time_epoch"][0]
+        )
     else:
-        frames["frame_num"] = []
-        frames["ts_sec_comb"] = []
-        frames["ts_sec_comb_rel"] = []
+        frames["frame.number"] = []
+        frames["frame.time_epoch"] = []
+        frames["frame.time_relative"] = []
     return frames
 
 
@@ -504,14 +510,17 @@ def frames_to_df(frames):
         csi = process_csi(csi, True, True, 5)
     # Making CSI capture DataFrame
     df = pd.DataFrame(
-        {   
-            "frame.time_relative": frames["ts_sec_comb_rel"],
+        {
+            "frame.number": frames["frame.number"],
+            "frame.time_epoch": frames["frame.time_epoch"],
+            "frame.time_relative": frames["frame.time_relative"],
             "fctl": frames["fctl"],
-            "fragn": frames["fragn"],
             "seqn": frames["seqn"],
+            "fragn": frames["fragn"],
         },
-        index=frames["frame_num"],
     )
+    # Setting the frame.number as the index
+    df = df.set_index("frame.number")
     # Adding CSI subcarrier vals as columns
     for i in np.arange(csi.shape[1]):
         df[f"csi_{i}_r"] = np.float16(np.real(csi[:, i]))
@@ -525,9 +534,12 @@ def frames_to_df(frames):
 **************************************************************************************************
 """
 
+
 def csi_to_df_init_mp():
     import warnings
+
     warnings.filterwarnings("ignore")
+
 
 def csi_to_df_mp(dir, name):
     print(f"{dir} - {name}")
@@ -541,7 +553,7 @@ def csi_to_df_mp(dir, name):
     frames = read_csi(csi_fp)
     # Format frames as a DataFrame
     df = frames_to_df(frames)
-    # Saving CSI dataframe as h5
+    # Saving dataframe as h5
     df.to_hdf(h5_fp, key=H5_CSI_KEY, mode="w")
 
 
@@ -553,7 +565,7 @@ def csi_to_df_mp(dir, name):
 
 
 def df_to_csi_matrix(df):
-    nsubs = int(np.sum("csi_" in df.columns)/2)
+    nsubs = int(np.sum("csi_" in df.columns) / 2)
     nframes = df.shape[0]
     csi = np.zeros((nframes, nsubs), dtype=np.complex64)
     for i in np.arange(nsubs):
@@ -563,7 +575,7 @@ def df_to_csi_matrix(df):
 
 """
 **************************************************************************************************
-            AGGREGATING CSI DATA FROM AN GROUP OF CAPTURES
+            AGGREGATING CSI DATA FROM A GROUP OF CAPTURES
 **************************************************************************************************
 """
 

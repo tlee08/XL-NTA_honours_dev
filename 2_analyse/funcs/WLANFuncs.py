@@ -23,7 +23,7 @@ command = "tshark -G | cut -f 3"
 FIELDS = [
     #
     # ("frame", "<U30"),
-    # ("frame.time_epoch", np.float64),
+    ("frame.time_epoch", np.float64),
     ("frame.time_relative", np.float64),
     ("frame.number", np.int64),
     ("frame.len", np.int32),
@@ -106,7 +106,7 @@ def pcap_to_json(wlan_fp, json_fp, ssid, pwd, fields):
 """
 
 
-def json_to_df(json_fp):
+def json_to_df(json_fp, fields=None):
     # Reading in JSON and initial reformatting (vectorising)
     with open(json_fp) as f:
         content = json.load(f)
@@ -127,11 +127,13 @@ def df_wlan_clean(df, fields):
         if col not in df.columns:
             df[col] = fill_val
         df[col] = df[col].astype(col_type)
-    # Cleaning the TCP/UDP ports (it is always either or)
+    # Merging the TCP/UDP ports (it is always either protocol - or neither)
     get_port = np.vectorize(lambda a, b: a if not a != 0 else b)
     df["srcport"] = get_port(df["tcp.srcport"], df["udp.srcport"])
     df["dstport"] = get_port(df["tcp.dstport"], df["udp.dstport"])
     df = df.drop(columns=["tcp.srcport", "tcp.dstport", "udp.srcport", "udp.dstport"])
+    # Setting the frame.number as the index
+    df = df.set_index("frame.number")
     return df
 
 
@@ -158,7 +160,6 @@ def calc_stream_attr(df):
             return f"{row['ip.src']} -> {row['ip.dst']}"
         else:
             return f"{row['ip.dst']} -> {row['ip.src']}"
-
     return df.apply(_add_stream_attr, axis=1)
 
 
@@ -177,11 +178,13 @@ def df_wlan_derive_attrs(df, mac_src):
 
 def wlan_to_df_init_mp(_ssid, _pwd):
     import warnings
+
     warnings.filterwarnings("ignore")
     global ssid
     global pwd
     ssid = _ssid
     pwd = _pwd
+
 
 def wlan_to_df_mp(dir, name):
     print(f"{dir} - {name}")
@@ -198,13 +201,15 @@ def wlan_to_df_mp(dir, name):
         metadata = json.load(f)
     # Converting pcap to decrypted json
     pcap_to_json(wlan_fp, json_fp, ssid, pwd, TSHARK_FIELDS)
-    # Converting json to h5, processing (adding attributes), and saving
+    # Converting json to h5, cleaning (setting correct dtypes), deriving attributes
     df = json_to_df(json_fp)
     df = df_wlan_clean(df, FIELDS)
     df = df_wlan_derive_attrs(df, metadata["mac"])
+    # Saving dataframe as h5
     df.to_hdf(h5_fp, key=H5_WLAN_KEY, mode="w")
     # Making space on the filesystem by removing the wlan_json file (always large)
     os.remove(json_fp)
+
 
 """
 **************************************************************************************************

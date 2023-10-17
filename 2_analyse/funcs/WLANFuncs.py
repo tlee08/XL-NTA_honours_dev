@@ -106,7 +106,7 @@ def pcap_to_json(wlan_fp, json_fp, ssid, pwd, fields):
 """
 
 
-def json_to_df(json_fp, fields=None):
+def json_to_df(json_fp):
     # Reading in JSON and initial reformatting (vectorising)
     with open(json_fp) as f:
         content = json.load(f)
@@ -119,6 +119,9 @@ def json_to_df(json_fp, fields=None):
 
 
 def df_wlan_clean(df, fields):
+    """
+    Expects fields to be a list of (column_name, column_type) tuple pairs.
+    """
     fill_val = 0
     # Filling in missing values
     df = df.fillna(fill_val)

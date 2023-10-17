@@ -261,7 +261,7 @@ def read_frame(fc, ptr, bandwidth):
     csi = fc[ptr + 76 : ptr + 76 + (nsubs * 4)]
     # Converting csi bytes to a int16 numpy array
     csi = np.frombuffer(csi, dtype=np.int16)
-    # Convert csi into complex numbers
+    # Convert csi into complex numbers (numbers are interleaved)
     csi = (csi[::2] + 1j * csi[1::2]).astype(np.complex64)
     # Shifting carriers to the centre of the spectrum
     frame["csi"] = np.fft.fftshift(csi)
@@ -453,6 +453,7 @@ def process_csi(_csi_matrix, rnull=False, rpilot=False, rm_outliers=None):
     # Setting null and pilot subcarriers to 0 (if specified)
     if rnull:
         csi_matrix[:, nulls[bandwidth]] = 0
+    # Setting null and pilot subcarriers to 0 (if specified)
     if rpilot:
         csi_matrix[:, pilots[bandwidth]] = 0
     if rm_outliers:
@@ -523,8 +524,8 @@ def frames_to_df(frames):
     df = df.set_index("frame.number")
     # Adding CSI subcarrier vals as columns
     for i in np.arange(csi.shape[1]):
-        df[f"csi_{i}_r"] = np.float16(np.real(csi[:, i]))
-        df[f"csi_{i}_i"] = np.float16(np.imag(csi[:, i]))
+        df[f"csi_{i}_r"] = np.int16(np.real(csi[:, i]))
+        df[f"csi_{i}_i"] = np.int16(np.imag(csi[:, i]))
     return df
 
 

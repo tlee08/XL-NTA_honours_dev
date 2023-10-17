@@ -2,18 +2,24 @@ import os
 import shutil
 from glob import glob
 
-# Going through each of the <device>_<location> folders
+# From and To root folders
 from_dir = "/Volumes/tim_details/tim_honours/CAPTURES/"
 to_dir = "/Users/timothylee/Desktop/Captures"
 
+# For each {device}_{location}
 for i in os.listdir(from_dir):
     print(i)
-    from_dir_i = os.path.join(from_dir, i)
-    for j in os.listdir(from_dir_i):
+    # For each {content}
+    for j in os.listdir(os.path.join(from_dir, i)):
         print(j)
-        # Copying csi_all.npy to corresponding directory
+        # Copying wlan h5 files to corresponding directory
         shutil.copytree(
             os.path.join(from_dir, i, j, "wlan_h5"),
-            os.path.join(to_dir, i, j, "wlan_h5")
+            os.path.join(to_dir, i, j, "wlan_h5"),
+        )
+        # Copying csi h5 files to corresponding directory
+        shutil.copytree(
+            os.path.join(from_dir, i, j, "csi_h5"),
+            os.path.join(to_dir, i, j, "csi_h5"),
         )
     print()

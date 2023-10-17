@@ -12,6 +12,11 @@ conda install -n base conda-libmamba-solver
 conda config --set solver libmamba
 ```
 
+Allow VS Code to see conda envs
+```bash
+conda install -n base nb_conda_kernels
+```
+
 Create `honours_env` conda env from yaml file.
 ```bash
 # conda env create -f honours.yaml -y

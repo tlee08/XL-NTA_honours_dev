@@ -3,6 +3,7 @@ from glob import glob
 import shutil
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from ipywidgets import interact, widgets
@@ -105,3 +106,43 @@ def InteractivePlot(csi):
     update(vmax_slider.value)
     # Show the interactive plot
     plt.show()
+
+"""
+**************************************************************************************************
+            BIN DF BY TIME FUNCS
+**************************************************************************************************
+"""
+
+# TODO: try with "frame.time_epoch" and "frame.time_relative"
+def ts_bin_df(df, interval, agg_dict):
+    df = df.copy()
+    # Generating time-bins
+    time_series = df["frame.time_relative"]
+    # If the df is empty (i.e. empty capture)
+    if time_series.shape[0] == 0:
+        return pd.DataFrame(columns=list(agg_dict.keys()))
+    # Making list of bins
+    bins = np.arange(
+        np.floor(time_series.min()),
+        np.ceil(time_series.max()) + interval,
+        interval,
+    )
+    # Adding binned category column to data
+    df["ts_bins"] = pd.cut(
+        time_series,
+        bins=bins,
+        include_lowest=True,
+        labels=bins[:-1],
+    )
+
+    # Grouping and aggregating data on time bins
+    df_binned = df.groupby("ts_bins").agg(agg_dict)
+    # Ensuring that there are all timebins (even if some rows are empty)
+    df_binned = (
+        df_binned
+        .reset_index()
+        .merge(pd.Series(bins, name="ts_bins"), on="ts_bins", how="right")
+        .set_index("ts_bins")
+        .sort_index()
+    )
+    return df_binned

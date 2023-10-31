@@ -123,7 +123,7 @@ def ts_bin_df(df, interval, agg_dict):
         return pd.DataFrame(columns=list(agg_dict.keys()))
     # Making list of bins
     bins = np.arange(
-        np.floor(time_series.min()),
+        0,
         np.ceil(time_series.max()) + interval,
         interval,
     )

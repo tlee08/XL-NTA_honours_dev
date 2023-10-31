@@ -1,5 +1,5 @@
 # conda env create -f honours.yaml -y
-# conda env update -f honours.yaml --prune -y
+# conda env update -f honours.yaml --prune
 
 # conda env remove -n honours_env -y
 
@@ -23,5 +23,7 @@ dependencies:
   - ipywidgets
   - scikit-learn
   - tensorflow
-  - pip:
-     -
+  - pydot
+  - graphviz
+  # - pip:
+  #    -

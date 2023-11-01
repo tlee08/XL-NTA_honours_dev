@@ -255,9 +255,8 @@ def list_convs_TODO(df):
 
 
 def gen_time_bins(series, interval):
-    start = np.floor(series.min())
     end = np.ceil(series.max()) + interval
-    bins = np.arange(start, end, interval)
+    bins = np.arange(0, end, interval)
     return pd.cut(series, bins=bins, include_lowest=True, labels=bins[:-1])
 
 

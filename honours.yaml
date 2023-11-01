@@ -25,5 +25,7 @@ dependencies:
   - tensorflow
   - pydot
   - graphviz
+  - pyyaml
+  - h5py
   # - pip:
   #    -

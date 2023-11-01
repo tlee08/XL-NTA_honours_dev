@@ -566,7 +566,7 @@ def csi_to_df_mp(dir, name):
 
 
 def df_to_csi_matrix(df):
-    # Getting the shape of CSI matrix (# subcarriers,a dn # frames)
+    # Getting the shape of CSI matrix (# subcarriers, # frames)
     nsubs = int(np.sum(["csi_" in i for i in df.columns]) / 2)
     nframes = df.shape[0]
     # Initialising CSI matrix
